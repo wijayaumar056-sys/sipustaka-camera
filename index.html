@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#047857">
+  <title>Pemindai QR SiPustaka SD Digital</title>
+  <style>
+    :root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f1f5f9;color:#0f172a;min-height:100vh}
+    header{background:#047857;color:white;padding:18px 16px}
+    header h1{font-size:1.2rem;margin:0 0 5px}
+    header p{margin:0;font-size:.9rem;opacity:.92}
+    main{width:min(760px,100%);margin:0 auto;padding:16px}
+    .card{background:white;border:1px solid #dbe3ec;border-radius:18px;padding:16px;box-shadow:0 4px 18px #0f172a0b}
+    #reader{width:100%;min-height:250px;overflow:hidden;border-radius:12px;background:#0f172a}
+    #status{margin:12px 0;padding:12px;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:.92rem}
+    .buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    button,.file-button{border:0;border-radius:10px;padding:12px 14px;font-weight:700;cursor:pointer;font-size:.92rem}
+    #start{background:#047857;color:white}#stop{background:#e2e8f0;color:#334155}
+    .file-button{display:inline-block;background:#dbeafe;color:#1e40af}
+    input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+    .hint{font-size:.86rem;color:#475569;line-height:1.55}
+    .code{font-size:1.25rem;font-weight:800;overflow-wrap:anywhere}
+    footer{text-align:center;color:#64748b;font-size:.78rem;padding:16px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📷 Pemindai QR SiPustaka SD Digital</h1>
+    <p>Halaman kamera terpisah untuk peminjaman, pengembalian, kunjungan, dan ISBN.</p>
+  </header>
+  <main>
+    <div class="card">
+      <div id="status" role="status" aria-live="polite">Tekan “Mulai Kamera”, lalu izinkan akses kamera jika diminta.</div>
+      <div id="reader"></div>
+      <div class="buttons">
+        <button id="start" type="button">Mulai Kamera</button>
+        <button id="stop" type="button">Matikan Kamera</button>
+        <label class="file-button" for="photo">Baca dari Foto</label>
+        <input id="photo" type="file" accept="image/*" capture="environment">
+      </div>
+      <p class="hint">
+        Arahkan kamera ke QR/barcode sampai kode terbaca. Hasil akan dikirim otomatis ke tab SiPustaka.
+        Jika kamera tidak muncul, pastikan halaman ini dibuka menggunakan HTTPS dan izinkan kamera untuk situs GitHub Pages.
+      </p>
+      <div id="result" hidden>
+        <p>Hasil pembacaan:</p>
+        <div class="code" id="code"></div>
+        <button id="sendAgain" type="button" style="margin-top:10px;background:#d1fae5;color:#065f46">Kirim hasil lagi ke SiPustaka</button>
+      </div>
+    </div>
+  </main>
+  <footer>SiPustaka SD Digital · Pemindai kamera eksternal</footer>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    (function () {
+      const status = document.getElementById('status');
+      const resultBox = document.getElementById('result');
+      const codeBox = document.getElementById('code');
+      const photoInput = document.getElementById('photo');
+      let scanner = null;
+      let lastCode = '';
+      let busy = false;
+
+      function say(message, isError) {
+        status.textContent = message;
+        status.style.background = isError ? '#fff1f2' : '#ecfdf5';
+        status.style.color = isError ? '#9f1239' : '#065f46';
+      }
+
+      function sendToApp(code) {
+        const clean = String(code || '').trim();
+        if (!clean) return;
+        lastCode = clean;
+        codeBox.textContent = clean;
+        resultBox.hidden = false;
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'SIPUSTAKA_QR_SCAN', code: clean }, '*');
+          say('Kode berhasil dibaca dan dikirim ke tab SiPustaka. Anda dapat kembali ke tab aplikasi.', false);
+          stopCamera();
+        } else {
+          say('Kode terbaca, tetapi tab SiPustaka tidak ditemukan. Kode tetap terlihat di bawah; salin lalu masukkan ke aplikasi.', true);
+        }
+      }
+
+      async function stopCamera() {
+        if (!scanner) return;
+        try {
+          if (scanner.isScanning) await scanner.stop();
+          await scanner.clear();
+        } catch (e) {}
+        scanner = null;
+      }
+
+      async function startCamera() {
+        if (busy) return;
+        busy = true;
+        try {
+          if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Akses kamera memerlukan HTTPS dan browser yang mendukung kamera.');
+          }
+          await stopCamera();
+          scanner = new Html5Qrcode('reader', {
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.QR_CODE,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.ITF
+            ],
+            verbose: false
+          });
+          say('Meminta izin kamera…', false);
+          await scanner.start(
+            { facingMode: 'environment' },
+            { fps: 12, qrbox: function (w, h) {
+                const side = Math.max(180, Math.min(320, Math.floor(Math.min(w, h) * 0.78)));
+                return { width: side, height: side };
+              }, aspectRatio: 1.0, disableFlip: false },
+            function (decodedText) { sendToApp(decodedText); },
+            function () {}
+          );
+          say('Kamera aktif. Arahkan ke QR/barcode sampai terbaca.', false);
+        } catch (e) {
+          const message = e && e.message ? e.message : String(e || 'Kesalahan tidak diketahui');
+          say('Kamera gagal dibuka: ' + message + ' Pastikan izin kamera diizinkan pada situs GitHub Pages.', true);
+        } finally {
+          busy = false;
+        }
+      }
+
+      document.getElementById('start').addEventListener('click', startCamera);
+      document.getElementById('stop').addEventListener('click', async function () {
+        await stopCamera();
+        say('Kamera dimatikan.', false);
+      });
+      document.getElementById('sendAgain').addEventListener('click', function () {
+        if (lastCode) sendToApp(lastCode);
+      });
+      photoInput.addEventListener('change', async function () {
+        const file = photoInput.files && photoInput.files[0];
+        if (!file) return;
+        try {
+          const decoder = new Html5Qrcode('reader');
+          say('Membaca QR/barcode dari foto…', false);
+          const decoded = await decoder.scanFile(file, true);
+          await decoder.clear();
+          sendToApp(decoded);
+        } catch (e) {
+          say('Kode belum terbaca dari foto. Ambil foto lebih dekat, terang, dan pastikan kode utuh.', true);
+        } finally {
+          photoInput.value = '';
+        }
+      });
+
+      window.addEventListener('beforeunload', function () {
+        try { if (scanner && scanner.isScanning) scanner.stop(); } catch (e) {}
+      });
+    })();
+  </script>
+</body>
+</html>
