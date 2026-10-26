@@ -18,7 +18,7 @@
     #status{margin:12px 0;padding:12px;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:.92rem}
     .buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
     button,.file-button{border:0;border-radius:10px;padding:12px 14px;font-weight:700;cursor:pointer;font-size:.92rem}
-    #start{background:#047857;color:white}#stop{background:#e2e8f0;color:#334155}
+    #start{background:#047857;color:white}#stop{background:#e2e8f0;color:#334155}#captureCover{background:#7c3aed;color:white;display:none}
     .file-button{display:inline-block;background:#dbeafe;color:#1e40af}
     input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
     .hint{font-size:.86rem;color:#475569;line-height:1.55}
@@ -29,7 +29,7 @@
 <body>
   <header>
     <h1>📷 Pemindai QR SiPustaka SD Digital</h1>
-    <p>Halaman kamera terpisah untuk peminjaman, pengembalian, kunjungan, dan ISBN.</p>
+    <p>Kamera langsung untuk ISBN, OCR sampul buku, peminjaman, pengembalian, dan kunjungan.</p>
   </header>
   <main>
     <div class="card">
@@ -37,12 +37,12 @@
       <div id="reader"></div>
       <div class="buttons">
         <button id="start" type="button">Mulai Kamera</button>
-        <button id="stop" type="button">Matikan Kamera</button>
+        <button id="stop" type="button">Matikan Kamera</button><button id="captureCover" type="button">📸 Ambil Sampul untuk OCR</button>
         <label class="file-button" for="photo">Baca dari Foto</label>
         <input id="photo" type="file" accept="image/*" capture="environment">
       </div>
       <p class="hint">
-        Arahkan kamera ke QR/barcode sampai kode terbaca. Hasil akan dikirim otomatis ke tab SiPustaka.
+        Untuk ISBN atau kartu, arahkan kamera ke kode sampai terbaca. Untuk OCR, arahkan kamera ke sampul buku lalu tekan tombol Ambil Sampul untuk OCR.
         Jika kamera tidak muncul, pastikan halaman ini dibuka menggunakan HTTPS dan izinkan kamera untuk situs GitHub Pages.
       </p>
       <div id="result" hidden>
@@ -60,6 +60,9 @@
       const resultBox = document.getElementById('result');
       const codeBox = document.getElementById('code');
       const photoInput = document.getElementById('photo');
+      const captureButton = document.getElementById('captureCover');
+      const mode = new URLSearchParams(window.location.search).get('mode') || 'circulation';
+      if (mode === 'ocr') { captureButton.style.display = 'inline-block'; say('Mode OCR sampul aktif. Mulai kamera, arahkan ke sampul, lalu ambil gambar.', false); }
       let scanner = null;
       let lastCode = '';
       let busy = false;
@@ -71,6 +74,7 @@
       }
 
       function sendToApp(code) {
+        if (mode === 'ocr') return;
         const clean = String(code || '').trim();
         if (!clean) return;
         lastCode = clean;
@@ -122,10 +126,10 @@
                 const side = Math.max(180, Math.min(320, Math.floor(Math.min(w, h) * 0.78)));
                 return { width: side, height: side };
               }, aspectRatio: 1.0, disableFlip: false },
-            function (decodedText) { sendToApp(decodedText); },
+            function (decodedText) { if (mode !== 'ocr') sendToApp(decodedText); },
             function () {}
           );
-          say('Kamera aktif. Arahkan ke QR/barcode sampai terbaca.', false);
+          say(mode === 'ocr' ? 'Kamera aktif. Arahkan ke sampul buku dan tekan Ambil Sampul untuk OCR.' : 'Kamera aktif. Arahkan ke QR/barcode sampai terbaca.', false);
         } catch (e) {
           const message = e && e.message ? e.message : String(e || 'Kesalahan tidak diketahui');
           say('Kamera gagal dibuka: ' + message + ' Pastikan izin kamera diizinkan pada situs GitHub Pages.', true);
@@ -155,6 +159,32 @@
           say('Kode belum terbaca dari foto. Ambil foto lebih dekat, terang, dan pastikan kode utuh.', true);
         } finally {
           photoInput.value = '';
+        }
+      });
+
+      captureButton.addEventListener('click', async function () {
+        const video = document.querySelector('#reader video');
+        if (!video || !video.videoWidth || !video.videoHeight) {
+          say('Kamera belum aktif. Tekan Mulai Kamera terlebih dahulu.', true);
+          return;
+        }
+        try {
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1, 1400 / video.videoWidth);
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const image = canvas.toDataURL('image/jpeg', 0.88);
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'SIPUSTAKA_OCR_IMAGE', image: image }, '*');
+            say('Gambar sampul dikirim ke SiPustaka untuk diproses OCR Vision.', false);
+            await stopCamera();
+          } else {
+            say('Tab SiPustaka tidak ditemukan. Buka kamera dari tombol di dalam aplikasi.', true);
+          }
+        } catch (e) {
+          say('Gagal mengambil gambar dari kamera. Coba lagi.', true);
         }
       });
 
