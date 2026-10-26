@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#047857">
-  <title>Pemindai Otomatis SiPustaka SD Digital</title>
+  <title>Pemindai SiPustaka SD Digital</title>
   <style>
     :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
@@ -15,20 +15,17 @@
     main { width: min(720px, 100%); margin: 0 auto; padding: 12px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
     .card { background: #1e293b; border: 1px solid #334155; border-radius: 18px; padding: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); position: relative; }
     
-    /* Area Pemindai */
     #reader-container { position: relative; width: 100%; border-radius: 14px; overflow: hidden; background: #000; min-height: 280px; }
     #reader { width: 100% !important; border: 0 !important; }
     #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
     
-    /* Garis Laser & Bidik Animasi */
-    .laser-line { position: absolute; left: 5%; right: 5%; height: 2px; background: #10b981; box-shadow: 0 0 10px #10b981, 0 0 20px #10b981; top: 10%; animation: scanMove 2s infinite ease-in-out; pointer-events: none; z-index: 10; }
+    .laser-line { position: absolute; left: 5%; right: 5%; height: 2px; background: #10b981; box-shadow: 0 0 10px #10b981, 0 0 20px #10b981; top: 10%; animation: scanMove 2s infinite ease-in-out; pointer-events: none; z-index: 10; display: none; }
     @keyframes scanMove {
       0% { top: 15%; opacity: 0.8; }
       50% { top: 85%; opacity: 1; }
       100% { top: 15%; opacity: 0.8; }
     }
 
-    /* Overlay Hitungan Mundur OCR */
     #ocrOverlay { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.45); z-index: 20; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; }
     #countdownText { font-size: 3.5rem; font-weight: 900; color: #34d399; text-shadow: 0 4px 16px rgba(0,0,0,0.8); }
 
@@ -50,18 +47,17 @@
 <body>
   <header>
     <h1>📷 Pemindai SiPustaka SD Digital</h1>
-    <p id="headerSubtitle">Arahkan kamera ke Barcode ISBN, Kartu Siswa, atau Sampul Buku</p>
+    <p>Arahkan kamera ke Barcode ISBN, Kartu Siswa, atau Sampul Buku</p>
   </header>
 
   <main>
     <div class="card">
-      <div id="status">Menginisialisasi kamera HD…</div>
+      <div id="status">Menginisialisasi kamera…</div>
 
       <div id="reader-container">
         <div id="reader"></div>
         <div id="laser" class="laser-line"></div>
         
-        <!-- Overlay Timer Auto-Jepret Cover -->
         <div id="ocrOverlay">
           <p style="font-size: 0.95rem; font-weight: 700; margin: 0 0 6px;">Posisikan Sampul Buku di Tengah</p>
           <div id="countdownText">3</div>
@@ -78,7 +74,7 @@
       </div>
 
       <p class="hint" id="instructionHint">
-        <b>Tips:</b> Beri jarak sekitar 20–30 cm agar kamera fokus otomatis pada garis barcode ISBN.
+        <b>Tips:</b> Jaga jarak sekitar 20–30 cm agar barcode ISBN terlihat tajam dan tidak silau.
       </p>
 
       <div id="result" hidden>
@@ -89,7 +85,7 @@
     </div>
   </main>
 
-  <footer>SiPustaka SD Digital · Auto-Focus & Vision Engine</footer>
+  <footer>SiPustaka SD Digital · Vision Engine</footer>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script>
@@ -104,7 +100,6 @@
       const countdownText = document.getElementById('countdownText');
       const instructionHint = document.getElementById('instructionHint');
 
-      // Ambil mode dari parameter URL (?mode=ocr atau ?mode=isbn)
       const urlParams = new URLSearchParams(window.location.search);
       const mode = urlParams.get('mode') || 'circulation';
 
@@ -113,7 +108,6 @@
       let busy = false;
       let ocrTimer = null;
 
-      // Suara Beep saat kode terbaca
       function playBeep() {
         try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -135,7 +129,6 @@
         status.style.color = isError ? '#fecdd3' : '#a7f3d0';
       }
 
-      // Kirim hasil pembacaan QR/ISBN ke SiPustaka
       function sendToApp(code) {
         if (mode === 'ocr') return;
         const clean = String(code || '').trim();
@@ -151,13 +144,12 @@
         if (window.opener && !window.opener.closed) {
           window.opener.postMessage({ type: 'SIPUSTAKA_QR_SCAN', code: clean }, '*');
           say('✅ Kode ' + clean + ' terdeteksi & terkirim ke SiPustaka!', false);
-          setTimeout(() => { stopCamera(); }, 800);
+          setTimeout(() => { stopCamera(); }, 700);
         } else {
-          say('Kode terbaca: ' + clean + '. Tab utama tidak aktif, salin kode di bawah.', true);
+          say('Kode terbaca: ' + clean + '. Tab SiPustaka tidak terhubung; salin kode di bawah.', true);
         }
       }
 
-      // Ambil frame resolusi tinggi untuk OCR Cover
       function captureAndSendCover() {
         const video = document.querySelector('#reader video');
         if (!video || !video.videoWidth || !video.videoHeight) {
@@ -170,18 +162,17 @@
           if (navigator.vibrate) navigator.vibrate(150);
 
           const canvas = document.createElement('canvas');
-          // Ambil resolusi tinggi (maksimal lebar 1600px agar detail teks cover terbaca jelas oleh Gemini)
-          const scale = Math.min(1, 1600 / video.videoWidth);
+          const scale = Math.min(1, 1400 / video.videoWidth);
           canvas.width = Math.round(video.videoWidth * scale);
           canvas.height = Math.round(video.videoHeight * scale);
           const ctx = canvas.getContext('2d');
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          const image = canvas.toDataURL('image/jpeg', 0.90);
+          const image = canvas.toDataURL('image/jpeg', 0.88);
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage({ type: 'SIPUSTAKA_OCR_IMAGE', image: image }, '*');
-            say('✅ Foto sampul berhasil diambil & dikirim ke Gemini AI!', false);
-            setTimeout(() => { stopCamera(); }, 900);
+            say('✅ Foto sampul terkirim ke SiPustaka!', false);
+            setTimeout(() => { stopCamera(); }, 800);
           } else {
             say('Foto diambil, tetapi tab SiPustaka tidak terhubung.', true);
           }
@@ -190,7 +181,6 @@
         }
       }
 
-      // Hitungan mundur otomatis khusus mode OCR
       function startOcrCountdown() {
         let count = 3;
         ocrOverlay.style.display = 'flex';
@@ -232,7 +222,6 @@
 
           await stopCamera();
 
-          // Konfigurasi parser barcode khusus
           scanner = new Html5Qrcode('reader', {
             formatsToSupport: [
               Html5QrcodeSupportedFormats.EAN_13,
@@ -245,25 +234,19 @@
             verbose: false
           });
 
-          say('Menghubungkan kamera HD dengan fokus otomatis…', false);
+          say('Menghubungkan kamera belakang…', false);
 
-          // PENGATURAN KAMERA RESOLUSI TINGGI (HD / FULL HD & CONTINUOUS FOCUS)
-          const cameraConfig = {
-            facingMode: 'environment',
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            focusMode: { ideal: 'continuous' }
-          };
+          // Parameter kamera tepat 1 key agar memenuhi validasi library
+          const cameraConfig = { facingMode: "environment" };
 
-          // Kotak bidik: Persegi panjang lebar (300 x 140) agar pas dengan barcode horizontal
           const scanConfig = {
-            fps: 20,
+            fps: 15,
             qrbox: function (viewfinderWidth, viewfinderHeight) {
-              const width = Math.min(340, Math.floor(viewfinderWidth * 0.90));
-              const height = (mode === 'ocr') ? Math.floor(viewfinderHeight * 0.85) : Math.min(180, Math.floor(viewfinderHeight * 0.50));
+              const width = Math.min(320, Math.floor(viewfinderWidth * 0.88));
+              const height = (mode === 'ocr') ? Math.floor(viewfinderHeight * 0.80) : Math.min(160, Math.floor(viewfinderHeight * 0.50));
               return { width: width, height: height };
             },
-            aspectRatio: 1.777778,
+            aspectRatio: 1.0,
             disableFlip: false
           };
 
@@ -275,31 +258,29 @@
                 sendToApp(decodedText);
               }
             },
-            function () {} // onError abaikan frame kosong
+            function () {}
           );
 
           if (mode === 'ocr') {
             laser.style.display = 'none';
             captureButton.style.display = 'inline-flex';
-            say('Mode OCR Cover: Arahkan ke buku. Foto akan otomatis diambil.', false);
-            // Mulai hitungan otomatis setelah video stabil
+            say('Mode OCR Sampul: Arahkan ke buku. Foto diambil dalam 3 detik.', false);
             setTimeout(startOcrCountdown, 1200);
           } else {
             laser.style.display = 'block';
             captureButton.style.display = 'none';
-            say('Kamera HD Aktif. Arahkan barcode ISBN/QR ke dalam kotak bidik.', false);
+            say('Kamera aktif. Arahkan barcode ISBN atau kartu ke kotak bidik.', false);
           }
 
         } catch (e) {
           laser.style.display = 'none';
           const msg = e && e.message ? e.message : String(e);
-          say('Kamera gagal dibuka: ' + msg + '. Pastikan izin kamera telah diizinkan.', true);
+          say('Kamera gagal dibuka: ' + msg, true);
         } finally {
           busy = false;
         }
       }
 
-      // Event Listeners Tombol
       document.getElementById('start').addEventListener('click', startCamera);
       document.getElementById('stop').addEventListener('click', async function () {
         await stopCamera();
@@ -316,13 +297,12 @@
         if (lastCode) sendToApp(lastCode);
       });
 
-      // Tetap sediakan pembacaan file galeri jika dibutuhkan
       photoInput.addEventListener('change', async function () {
         const file = photoInput.files && photoInput.files[0];
         if (!file) return;
         try {
           const decoder = new Html5Qrcode('reader');
-          say('Menganalisis foto resolusi penuh…', false);
+          say('Membaca barcode dari foto…', false);
           const decoded = await decoder.scanFile(file, true);
           await decoder.clear();
           sendToApp(decoded);
@@ -337,12 +317,11 @@
         try { if (scanner && scanner.isScanning) scanner.stop(); } catch (e) {}
       });
 
-      // Otomatis menyalakan kamera HD saat halaman dibuka
       window.addEventListener('DOMContentLoaded', function () {
         if (mode === 'ocr') {
-          instructionHint.innerHTML = '<b>Mode OCR Sampul:</b> Posisikan sampul buku tegak lurus dan jelas. Sistem otomatis mengambil foto dalam 3 detik.';
+          instructionHint.innerHTML = '<b>Mode OCR Sampul:</b> Posisikan sampul buku jelas di layar. Pengambilan gambar berjalan otomatis.';
         }
-        setTimeout(startCamera, 400);
+        setTimeout(startCamera, 350);
       });
     })();
   </script>
